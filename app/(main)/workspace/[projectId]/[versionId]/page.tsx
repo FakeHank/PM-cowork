@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef, use, useMemo } from 'react';
+import { useState, useEffect, useRef, use, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import { Send, Loader2, Bot, RefreshCw } from 'lucide-react';
+import { Send, Loader2, Bot, RefreshCw, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -12,7 +13,8 @@ import { Badge } from '@/components/ui/badge';
 import { ChatMessage } from '@/components/chat/chat-message';
 import { FolderSelector } from '@/components/workspace/folder-selector';
 import { useAppStore, useWorkspaceStore } from '@/stores/app-store';
-import type { Project, Version } from '@/lib/types';
+import type { UIMessage } from 'ai';
+import type { Project, Version, Message as StoredMessage } from '@/lib/types';
 
 interface VersionPageProps {
   params: Promise<{
@@ -23,27 +25,56 @@ interface VersionPageProps {
 
 export default function VersionPage({ params }: VersionPageProps) {
   const { projectId, versionId } = use(params);
+  const router = useRouter();
   const [project, setProject] = useState<Project | null>(null);
   const [version, setVersion] = useState<Version | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [input, setInput] = useState('');
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null);
+  const [isGeneratingCanvas, setIsGeneratingCanvas] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { setCurrentProject, setCurrentVersion } = useAppStore();
+  const sessionIdRef = useRef<string | null>(null);
+  const { setCurrentProject, setCurrentVersion, activeSession } = useAppStore();
   const { currentFolderPath } = useWorkspaceStore();
 
   const fullVersionId = `${projectId}/${versionId}`;
+
+  const sessionStorageKey = useMemo(
+    () => `pmwork-session:${fullVersionId}`,
+    [fullVersionId]
+  );
+
+  const chatFetch = useCallback(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await fetch(input, init);
+      const newSessionId = response.headers.get('X-Session-Id');
+      if (newSessionId && newSessionId !== sessionIdRef.current) {
+        sessionIdRef.current = newSessionId;
+        setSessionId(newSessionId);
+        localStorage.setItem(sessionStorageKey, newSessionId);
+      }
+      return response;
+    },
+    [sessionStorageKey]
+  );
 
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: '/api/chat',
-        body: { versionId: fullVersionId },
+        body: () => ({
+          versionId: fullVersionId,
+          sessionId: sessionIdRef.current ?? undefined,
+        }),
+        fetch: chatFetch,
       }),
-    [fullVersionId]
+    [fullVersionId, chatFetch]
   );
 
   const {
     messages,
+    setMessages,
     sendMessage,
     status,
     error,
@@ -54,6 +85,87 @@ export default function VersionPage({ params }: VersionPageProps) {
   });
 
   const isChatLoading = status === 'streaming' || status === 'submitted';
+
+  useEffect(() => {
+    const storedSessionId = localStorage.getItem(sessionStorageKey);
+    sessionIdRef.current = storedSessionId;
+    setSessionId(storedSessionId);
+    setLoadedSessionId(null);
+  }, [sessionStorageKey]);
+
+  useEffect(() => {
+    if (!activeSession) return;
+    if (activeSession.versionId !== fullVersionId) return;
+    if (activeSession.sessionId === sessionIdRef.current) return;
+
+    sessionIdRef.current = activeSession.sessionId;
+    setSessionId(activeSession.sessionId);
+    setLoadedSessionId(null);
+    setMessages([]);
+    localStorage.setItem(sessionStorageKey, activeSession.sessionId);
+  }, [activeSession, fullVersionId, sessionStorageKey, setMessages]);
+
+  const toUIMessages = useCallback((items: StoredMessage[]): UIMessage[] => {
+    return items
+      .filter((item) => item.role === 'user' || item.role === 'assistant')
+      .map((item) => ({
+        id: item.id,
+        role: item.role,
+        parts: [{ type: 'text', text: item.content }],
+      }));
+  }, []);
+
+  useEffect(() => {
+    if (!sessionId || sessionId === loadedSessionId) return;
+    if (messages.length > 0) {
+      setLoadedSessionId(sessionId);
+      return;
+    }
+
+    let isActive = true;
+    const loadHistory = async () => {
+      try {
+        const res = await fetch(
+          `/api/chat/session?versionId=${encodeURIComponent(fullVersionId)}&sessionId=${encodeURIComponent(sessionId)}`
+        );
+
+        if (!res.ok) {
+          if (res.status === 404) {
+            localStorage.removeItem(sessionStorageKey);
+            sessionIdRef.current = null;
+            setSessionId(null);
+          }
+          return;
+        }
+
+        const { data } = await res.json();
+        const history = toUIMessages(data?.messages || []);
+        if (isActive && history.length > 0) {
+          setMessages((current) => (current.length === 0 ? history : current));
+        }
+      } catch (err) {
+        console.error('Failed to load session history:', err);
+      } finally {
+        if (isActive) {
+          setLoadedSessionId(sessionId);
+        }
+      }
+    };
+
+    loadHistory();
+
+    return () => {
+      isActive = false;
+    };
+  }, [
+    sessionId,
+    loadedSessionId,
+    fullVersionId,
+    messages.length,
+    sessionStorageKey,
+    setMessages,
+    toUIMessages,
+  ]);
 
   useEffect(() => {
     async function fetchData() {
@@ -103,6 +215,46 @@ export default function VersionPage({ params }: VersionPageProps) {
     await sendMessage({ text: messageContent });
   };
 
+  const handleGenerateCanvas = async () => {
+    try {
+      setIsGeneratingCanvas(true);
+      
+      // Check if canvas already exists
+      const checkRes = await fetch(`/api/canvas?versionId=${encodeURIComponent(fullVersionId)}`);
+      if (checkRes.ok) {
+        const { data } = await checkRes.json();
+        if (data && data.id) {
+          // Canvas exists, navigate to it
+          router.push(`/canvas/${data.id}`);
+          return;
+        }
+      }
+      
+      // Canvas doesn't exist, create one
+      const createRes = await fetch('/api/canvas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          versionId: fullVersionId,
+          name: `Canvas - ${version?.name || 'Untitled'}`,
+        }),
+      });
+      
+      if (!createRes.ok) {
+        const error = await createRes.json();
+        throw new Error(error.error || 'Failed to create canvas');
+      }
+      
+      const { data } = await createRes.json();
+      router.push(`/canvas/${data.id}`);
+    } catch (error) {
+      console.error('Failed to generate canvas:', error);
+      alert(error instanceof Error ? error.message : 'Failed to generate canvas');
+    } finally {
+      setIsGeneratingCanvas(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
@@ -132,6 +284,19 @@ export default function VersionPage({ params }: VersionPageProps) {
             {version?.status || 'active'}
           </Badge>
         </div>
+        <Button
+          onClick={handleGenerateCanvas}
+          disabled={isGeneratingCanvas}
+          size="sm"
+          className="gap-2"
+        >
+          {isGeneratingCanvas ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          Generate Canvas
+        </Button>
       </header>
 
       <ScrollArea className="flex-1 p-6" ref={scrollRef}>
