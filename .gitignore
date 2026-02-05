@@ -44,3 +44,7 @@ next-env.d.ts
 /settings.json
 /inbox/
 /projects/
+
+# dev artifacts
+.sisyphus/
+*.png

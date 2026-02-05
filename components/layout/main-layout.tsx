@@ -16,10 +16,10 @@ export function MainLayout({ children }: MainLayoutProps) {
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
+      {showRightPanel && <RightPanel side="left" />}
       <main className="flex-1 overflow-auto">
         {children}
       </main>
-      {showRightPanel && <RightPanel />}
     </div>
   );
 }

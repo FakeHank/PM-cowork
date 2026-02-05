@@ -196,7 +196,21 @@ export interface ProviderSettings {
 export interface AppSettings {
   provider: ProviderSettings;
   theme?: 'light' | 'dark' | 'system';
+  markdown?: MarkdownSettings;
 }
+
+export type MarkdownPreviewStyle = 'elegant' | 'compact' | 'spacious';
+export type MarkdownFontSize = 'sm' | 'md' | 'lg';
+
+export interface MarkdownSettings {
+  style: MarkdownPreviewStyle;
+  fontSize: MarkdownFontSize;
+}
+
+export const DEFAULT_MARKDOWN_SETTINGS: MarkdownSettings = {
+  style: 'elegant',
+  fontSize: 'md',
+};
 
 // Default built-in models per provider
 export const BUILTIN_MODELS = {

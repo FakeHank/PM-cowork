@@ -1,6 +1,6 @@
 # PMWork MVP — 技术实现文档
 
-> 版本：v0.2 Draft
+> 版本：v0.3
 > 日期：2026-02-04
 > 基于 PRD v0.1
 
@@ -12,29 +12,30 @@
 
 | 层级 | 技术选择 | 理由 |
 |------|----------|------|
-| **框架** | Next.js 15 (App Router) | 全栈框架，前后端一体，部署简单 |
+| **框架** | Next.js 16 (App Router) | 全栈框架，前后端一体，部署简单 |
 | **语言** | TypeScript | 类型安全，AI 辅助编码友好 |
 | **UI 组件** | shadcn/ui + Tailwind CSS | 复制粘贴即用，高度可定制 |
 | **AI 集成** | Vercel AI SDK (ToolLoopAgent) | **内置 Agent 循环**，多步骤工具调用，streaming |
-| **数据库** | Supabase (PostgreSQL) | 免费 tier，实时订阅 |
-| **文件存储** | Supabase Storage | 与数据库同一平台，简化管理 |
-| **部署** | Vercel | 一键部署，自动 CI/CD |
+| **数据存储** | 本地文件系统 (JSON + Markdown) | MVP 简化，无需数据库部署 |
+| **状态管理** | Zustand (with localStorage persist) | 轻量、持久化支持 |
+| **部署** | 本地开发 / Vercel | 灵活部署方式 |
 
 ### 1.2 关键架构决策
 
 | 决策 | 选择 | 理由 |
 |------|------|------|
+| **存储方案** | 本地文件系统 | MVP 简化，数据全部本地化 |
 | **Agent 架构** | Vercel AI SDK ToolLoopAgent | 内置多步骤循环，无需重型框架 |
 | **认证** | 暂不实现 | MVP 阶段简化，后续加入 |
 | **Canvas 输出** | React 组件 | 比纯 HTML 更灵活 |
 | **spec 编辑** | 仅通过对话 | 保持 AI 上下文完整性 |
+| **模型配置** | 可配置 Provider | 支持 Anthropic、OpenAI、自定义 OpenAI 兼容 API |
 
 ### 1.3 开发工具
 
 | 工具 | 用途 |
 |------|------|
-| pnpm | 包管理器 |
-| Drizzle ORM | 数据库 ORM（轻量、类型安全） |
+| npm | 包管理器 |
 | Zod | Schema 验证 |
 | OpenCode | AI 辅助开发 |
 
@@ -332,222 +333,170 @@ async function confirmChange(changeId: string) {
 ```
 pmwork/
 ├── app/                          # Next.js App Router
-│   ├── (auth)/                   # 认证相关页面
-│   │   ├── login/
-│   │   └── register/
 │   ├── (main)/                   # 主应用布局
 │   │   ├── layout.tsx            # 三栏布局
-│   │   ├── inbox/                # Inbox 模块
-│   │   │   └── page.tsx
-│   │   ├── workspace/            # Workspace 模块
-│   │   │   ├── page.tsx          # Project 列表
+│   │   ├── inbox/
+│   │   │   └── page.tsx          # 全局收件箱
+│   │   ├── workspace/
+│   │   │   ├── page.tsx          # 文件夹选择器（浏览本地目录）
 │   │   │   └── [projectId]/
 │   │   │       └── [versionId]/
 │   │   │           └── page.tsx  # Version 工作区
-│   │   └── canvas/               # Canvas 模块
-│   │       └── [canvasId]/
-│   │           └── page.tsx
-│   ├── api/                      # API Routes
-│   │   ├── inbox/
-│   │   ├── workspace/
 │   │   ├── canvas/
-│   │   └── chat/                 # AI 对话
+│   │   │   └── [canvasId]/
+│   │   │       └── page.tsx
+│   │   └── settings/
+│   │       └── page.tsx          # 设置页面（模型配置）
+│   ├── api/                      # API Routes
+│   │   ├── inbox/                # 收件箱 CRUD
+│   │   ├── projects/             # 项目 CRUD
+│   │   ├── folder/               # 文件夹浏览/检测/初始化
+│   │   ├── settings/             # 设置读写 + 连接测试
+│   │   ├── chat/                 # AI 对话
+│   │   ├── spec/                 # Spec 操作
+│   │   └── files/                # 文件操作
 │   └── layout.tsx                # 根布局
-├── components/                   # 共享组件
+├── components/
 │   ├── ui/                       # shadcn/ui 组件
-│   ├── inbox/                    # Inbox 专用组件
-│   ├── workspace/                # Workspace 专用组件
-│   ├── canvas/                   # Canvas 专用组件
-│   └── chat/                     # 对话相关组件
-├── lib/                          # 工具库
-│   ├── supabase/                 # Supabase 客户端
-│   ├── ai/                       # AI 相关封装
+│   ├── layout/                   # 布局组件 (sidebar, right-panel, resize-handle)
+│   ├── workspace/                # 工作区组件 (folder-selector)
+│   ├── chat/                     # 对话组件
+│   └── files/                    # 文件浏览/预览组件
+├── lib/
+│   ├── fs/                       # 文件系统操作
+│   │   ├── index.ts              # 核心工具函数
+│   │   ├── queries.ts            # 数据查询函数
+│   │   └── types.ts              # 文件系统类型
+│   ├── ai/                       # AI 相关
+│   │   ├── config.ts             # 模型配置
+│   │   ├── prompts.ts            # System Prompt
+│   │   └── tools.ts              # Agent 工具定义
 │   ├── utils.ts
 │   └── types.ts                  # 全局类型定义
-├── hooks/                        # 自定义 Hooks
-├── stores/                       # 状态管理 (Zustand)
-└── prisma/                       # 数据库 Schema（如使用 Prisma）
-    └── schema.prisma
+├── stores/
+│   └── app-store.ts              # Zustand stores (App, Inbox, Chat, Workspace, Settings)
+├── docs/                         # 文档
+├── projects/                     # 项目数据（gitignore）
+├── inbox/                        # 收件箱数据（gitignore）
+└── settings.json                 # 设置文件（gitignore）
 ```
 
 ---
 
 ## 四、数据模型
 
-### 4.1 核心实体关系
+### 4.1 文件系统结构
+
+MVP 阶段使用本地文件系统存储所有数据：
 
 ```
-InboxItem (N)
-     │
-Project (N)
-     │
-     └── Version (1:N)
-          │
-          ├── SpecSection (1:N)     ← 结构化章节（新增）
-          │
-          ├── Session (1:N) ─── Message (1:N)
-          │
-          ├── Decision (1:N)        ← 决策记录（新增）
-          │
-          ├── Asset (1:N)
-          │
-          ├── Reference (1:N)
-          │
-          └── Canvas (1:1)
+pmwork/
+├── projects/                          # 项目数据根目录
+│   └── {project-slug}/                # 项目文件夹（slug 化的项目名）
+│       ├── meta.json                  # 项目元数据
+│       └── {version-slug}/            # 版本文件夹
+│           ├── meta.json              # 版本元数据
+│           ├── spec.md                # PRD 文档（Markdown）
+│           ├── sessions/              # 对话记录
+│           │   └── {session-id}.json
+│           ├── assets/                # 素材文件
+│           └── references/            # 引用资料
+├── inbox/                             # 全局收件箱
+│   └── {item-id}.json                 # 单条收件箱项目
+└── settings.json                      # 全局设置（模型配置等）
 ```
 
-### 4.2 数据库 Schema
+### 4.2 核心数据类型 (TypeScript)
 
-```sql
--- ============================================
--- MVP 阶段暂不实现认证，所有数据共享
--- ============================================
+```typescript
+// lib/types.ts
 
--- Inbox 碎片
-CREATE TABLE inbox_items (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  content TEXT NOT NULL,                    -- 主体内容
-  content_type TEXT NOT NULL,               -- text, file, image, audio, link
-  metadata JSONB DEFAULT '{}',              -- 原始文件信息、URL 等
-  ai_summary TEXT,                          -- AI 生成的摘要
-  ai_tags TEXT[] DEFAULT '{}',              -- AI 自动标签
-  linked_version_id UUID,                   -- 关联的 Version（可空）
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+// === Inbox ===
+interface InboxItem {
+  id: string;
+  content: string;
+  contentType: 'text' | 'file' | 'image' | 'audio' | 'link';
+  metadata: Record<string, unknown>;
+  aiSummary?: string;
+  aiTags: string[];
+  linkedVersionId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
--- Project
-CREATE TABLE projects (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  description TEXT,
-  context TEXT,                             -- Project 级别的背景信息
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+// === Project ===
+interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  context?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
--- Version
-CREATE TABLE versions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,                       -- e.g., "v1.0", "v2.1"
-  status TEXT NOT NULL DEFAULT 'active',    -- active, done
-  parent_version_id UUID REFERENCES versions(id), -- 继承的父版本
-  ai_summary TEXT,                          -- AI 生成的版本摘要
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+// === Version ===
+interface Version {
+  id: string;
+  projectId: string;
+  name: string;
+  status: 'active' | 'done';
+  parentVersionId?: string;
+  aiSummary?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
--- ============================================
--- spec.md 结构化存储（关键！支持 Agent 操作）
--- ============================================
+// === Session & Message ===
+interface Session {
+  id: string;
+  versionId: string;
+  title?: string;
+  summary?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
--- Spec 章节（结构化存储，而非纯文本）
-CREATE TABLE spec_sections (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  version_id UUID NOT NULL REFERENCES versions(id) ON DELETE CASCADE,
-  parent_id UUID REFERENCES spec_sections(id),  -- 父章节（支持嵌套）
-  order_index INTEGER NOT NULL DEFAULT 0,       -- 排序
-  title TEXT NOT NULL,                          -- 章节标题
-  content TEXT DEFAULT '',                      -- 章节内容（Markdown）
-  status TEXT DEFAULT 'draft',                  -- draft, todo, done
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+interface Message {
+  id: string;
+  sessionId: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  metadata: MessageMetadata;
+  createdAt: Date;
+}
 
--- 决策记录（Agent 记忆）
-CREATE TABLE decisions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  version_id UUID NOT NULL REFERENCES versions(id) ON DELETE CASCADE,
-  session_id UUID,                              -- 产生决策的会话
-  decision TEXT NOT NULL,                       -- 决策内容
-  context TEXT,                                 -- 决策背景
-  alternatives JSONB DEFAULT '[]',              -- 考虑过的替代方案
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+// === Settings ===
+type ProviderType = 'anthropic' | 'openai' | 'custom';
 
--- 约束记录（Agent 记忆）
-CREATE TABLE constraints (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  version_id UUID NOT NULL REFERENCES versions(id) ON DELETE CASCADE,
-  constraint_type TEXT NOT NULL,                -- technical, business, design
-  description TEXT NOT NULL,
-  source TEXT,                                  -- 约束来源
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+interface ProviderSettings {
+  provider: ProviderType;
+  apiKey?: string;
+  baseUrl?: string;       // 自定义 OpenAI 兼容 API 的 Base URL
+  defaultModel: string;
+  customModels?: string[];
+}
 
--- Session（对话会话）
-CREATE TABLE sessions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  version_id UUID NOT NULL REFERENCES versions(id) ON DELETE CASCADE,
-  title TEXT,
-  summary TEXT,                             -- AI 生成的会话摘要
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+interface AppSettings {
+  provider: ProviderSettings;
+  theme?: 'light' | 'dark' | 'system';
+}
+```
 
--- Message（对话消息）
-CREATE TABLE messages (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-  role TEXT NOT NULL,                       -- user, assistant, system
-  content TEXT NOT NULL,
-  metadata JSONB DEFAULT '{}',              -- 工具调用、spec 更新记录等
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+### 4.3 文件操作工具 (lib/fs/)
 
--- Asset（素材）
-CREATE TABLE assets (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  version_id UUID NOT NULL REFERENCES versions(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  file_path TEXT NOT NULL,                  -- Supabase Storage 路径
-  file_type TEXT NOT NULL,
-  file_size INTEGER,
-  ai_description TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+```typescript
+// lib/fs/index.ts - 核心常量和工具函数
+export const PROJECTS_ROOT = path.join(process.cwd(), 'projects');
+export const GLOBAL_INBOX_ROOT = path.join(process.cwd(), 'inbox');
+export const SETTINGS_FILE = path.join(process.cwd(), 'settings.json');
 
--- Reference（引用）
-CREATE TABLE references (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  version_id UUID NOT NULL REFERENCES versions(id) ON DELETE CASCADE,
-  source_type TEXT NOT NULL,                -- prev_spec, inbox, external
-  source_id UUID,                           -- 来源 ID（可空）
-  content TEXT NOT NULL,                    -- 引用的内容
-  metadata JSONB DEFAULT '{}',
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Canvas（原型）
-CREATE TABLE canvases (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  version_id UUID NOT NULL REFERENCES versions(id) ON DELETE CASCADE,
-  pages JSONB DEFAULT '[]',                 -- 页面列表和结构
-  generated_code TEXT,                      -- AI 生成的代码
-  preview_url TEXT,                         -- 预览 URL（如有）
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- spec.md 变更历史
-CREATE TABLE spec_history (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  version_id UUID NOT NULL REFERENCES versions(id) ON DELETE CASCADE,
-  session_id UUID REFERENCES sessions(id),  -- 触发变更的会话
-  message_id UUID REFERENCES messages(id),  -- 触发变更的消息
-  diff TEXT NOT NULL,                       -- 变更内容（diff 格式）
-  description TEXT,                         -- 变更描述
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 索引
-CREATE INDEX idx_inbox_items_user ON inbox_items(user_id);
-CREATE INDEX idx_inbox_items_created ON inbox_items(created_at DESC);
-CREATE INDEX idx_projects_user ON projects(user_id);
-CREATE INDEX idx_versions_project ON versions(project_id);
-CREATE INDEX idx_sessions_version ON sessions(version_id);
-CREATE INDEX idx_messages_session ON messages(session_id);
+// 工具函数
+export async function readJson<T>(filePath: string): Promise<T | null>;
+export async function writeJson<T>(filePath: string, data: T): Promise<void>;
+export async function readText(filePath: string): Promise<string | null>;
+export async function writeText(filePath: string, content: string): Promise<void>;
+export function slugify(text: string): string;
+export function generateId(): string;
 ```
 
 ---
@@ -903,24 +852,72 @@ components/canvas/
 
 ---
 
-### 5.4 AI 集成（Agent 模式）
+### 5.4 设置功能
 
-#### 5.4.1 Vercel AI SDK 配置
+#### 5.4.1 模型提供商配置
+
+用户可以在设置页面配置 AI 模型提供商：
+
+| 提供商类型 | 配置项 | 说明 |
+|-----------|--------|------|
+| Anthropic | API Key (可选) + 模型 | 留空 API Key 则使用 ANTHROPIC_API_KEY 环境变量 |
+| OpenAI | API Key (可选) + 模型 | 留空 API Key 则使用 OPENAI_API_KEY 环境变量 |
+| 自定义 | API Key + Base URL + 模型 | 支持 OpenAI 兼容 API（如火山引擎） |
+
+#### 5.4.2 内置模型列表
+
+```typescript
+const BUILTIN_MODELS = {
+  anthropic: [
+    { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4' },
+    { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku' },
+  ],
+  openai: [
+    { id: 'gpt-4o', name: 'GPT-4o' },
+    { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+  ],
+};
+```
+
+#### 5.4.3 自定义提供商支持
+
+已验证支持的 OpenAI 兼容服务：
+
+| 服务 | Base URL | 模型示例 |
+|------|----------|----------|
+| 火山引擎 Coding Plan | `https://ark.cn-beijing.volces.com/api/coding/v3` | `ark-code-latest` |
+
+**注意**: Vercel AI SDK 默认使用 `/responses` 端点，但大多数 OpenAI 兼容服务只支持 `/chat/completions`。测试连接功能已做特殊处理。
+
+---
+
+### 5.5 AI 集成（Agent 模式）
+
+#### 5.5.1 动态模型配置
 
 ```typescript
 // lib/ai/config.ts
-import { anthropic } from '@ai-sdk/anthropic';
-import { openai } from '@ai-sdk/openai';
+import { anthropic, createAnthropic } from '@ai-sdk/anthropic';
+import { openai, createOpenAI } from '@ai-sdk/openai';
+import { readJson, SETTINGS_FILE } from '@/lib/fs';
 
-// 默认使用 Claude 3.5 Sonnet（平衡能力和成本）
-export const defaultModel = anthropic('claude-3-5-sonnet-20241022');
-
-// 备选模型
-export const models = {
-  'claude-3-5-sonnet': anthropic('claude-3-5-sonnet-20241022'),
-  'claude-3-opus': anthropic('claude-3-opus-20240229'),
-  'gpt-4o': openai('gpt-4o'),
-};
+export async function getModel() {
+  const settings = await readJson<AppSettings>(SETTINGS_FILE);
+  const { provider, defaultModel, apiKey, baseUrl } = settings?.provider;
+  
+  switch (provider) {
+    case 'anthropic':
+      return apiKey 
+        ? createAnthropic({ apiKey })(defaultModel)
+        : anthropic(defaultModel);
+    case 'openai':
+      return apiKey
+        ? createOpenAI({ apiKey })(defaultModel)
+        : openai(defaultModel);
+    case 'custom':
+      return createOpenAI({ baseURL: baseUrl, apiKey })(defaultModel);
+  }
+}
 ```
 
 #### 5.4.2 Agent API Route
@@ -1051,17 +1048,28 @@ ${context.constraints.map(c => `- [${c.type}] ${c.description}`).join('\n') || '
 
 ## 七、MVP 范围与优先级
 
-### 7.1 P0（MVP 必须）
+### 7.1 P0（MVP 必须）- 已完成 ✅
 
-| 模块 | 功能 | 说明 |
+| 模块 | 功能 | 状态 |
 |------|------|------|
-| **Inbox** | 文字输入、时间流展示、搜索 | 最基础的碎片收集 |
-| **Workspace** | Project/Version CRUD | 基础数据管理 |
-| **Workspace** | **Agent 对话** | 核心功能：ToolLoopAgent + 工具调用 |
-| **Workspace** | **结构化 spec** | 章节级别的读/写/更新 |
-| **Workspace** | **修改确认流程** | diff 预览 + 用户确认 |
-| **Canvas** | 从 spec 生成 React 原型 | AI 生成 + iframe 预览 |
-| **Canvas** | 对话迭代 | 与 Workspace 类似的 Agent 模式 |
+| **Inbox** | 文字输入、时间流展示、搜索、删除 | ✅ 已完成 |
+| **Workspace** | 文件夹选择器（浏览本地目录） | ✅ 已完成 |
+| **Workspace** | Project/Version 创建和打开 | ✅ 已完成 |
+| **Workspace** | Agent 对话（基础） | ✅ 已完成 |
+| **Settings** | 模型提供商配置 | ✅ 已完成 |
+| **Settings** | 连接测试功能 | ✅ 已完成 |
+| **Settings** | 支持 Anthropic/OpenAI/自定义 | ✅ 已完成 |
+
+### 7.1.1 文件夹选择器
+
+取代传统的项目列表页面，实现了本地文件系统浏览器：
+
+- 用户可以浏览本地任意文件夹
+- 自动识别 PMWork 项目文件夹（黄色图标）
+- 自动识别版本文件夹（蓝色图标）
+- 点击版本文件夹直接打开工作区
+- 点击普通文件夹可选择在此创建新项目
+- 最近打开记录保存在 localStorage
 
 ### 7.2 P1（MVP 之后）
 

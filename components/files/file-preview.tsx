@@ -2,16 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { ArrowLeft, FileText, Image, File, Loader2 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import 'github-markdown-css/github-markdown-light.css';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { MarkdownPreview } from '@/components/files/markdown-preview';
 
 interface FilePreviewProps {
   versionId: string;
   filePath: string;
   onBack: () => void;
+  onContinueSession?: (sessionId: string) => void;
 }
 
 function getFileType(fileName: string): 'markdown' | 'image' | 'text' | 'unknown' {
@@ -45,13 +44,21 @@ function getFileType(fileName: string): 'markdown' | 'image' | 'text' | 'unknown
   }
 }
 
-export function FilePreview({ versionId, filePath, onBack }: FilePreviewProps) {
+function getSessionIdFromPath(filePath: string): string | null {
+  if (!filePath.startsWith('sessions/')) return null;
+  const fileName = filePath.split('/').pop() || '';
+  if (!fileName.endsWith('.json')) return null;
+  return fileName.replace(/\.json$/, '');
+}
+
+export function FilePreview({ versionId, filePath, onBack, onContinueSession }: FilePreviewProps) {
   const [content, setContent] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fileName = filePath.split('/').pop() || filePath;
   const fileType = getFileType(fileName);
+  const sessionId = getSessionIdFromPath(filePath);
 
   useEffect(() => {
     async function fetchContent() {
@@ -82,7 +89,7 @@ export function FilePreview({ versionId, filePath, onBack }: FilePreviewProps) {
   }, [versionId, filePath, fileType]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30">
         <Button
           variant="ghost"
@@ -102,6 +109,17 @@ export function FilePreview({ versionId, filePath, onBack }: FilePreviewProps) {
           )}
           <span className="text-sm font-medium truncate">{fileName}</span>
         </div>
+        {sessionId && onContinueSession && (
+          <Button
+            size="sm"
+            onClick={() => {
+              onContinueSession(sessionId);
+              onBack();
+            }}
+          >
+            继续对话
+          </Button>
+        )}
       </div>
 
       {isLoading ? (
@@ -121,18 +139,14 @@ export function FilePreview({ versionId, filePath, onBack }: FilePreviewProps) {
           </div>
         </div>
       ) : fileType === 'markdown' ? (
-        <ScrollArea className="flex-1">
-          <div className="p-4">
-            <article className="markdown-body" style={{ backgroundColor: 'transparent' }}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {content || ''}
-              </ReactMarkdown>
-            </article>
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="p-6">
+            <MarkdownPreview content={content || ''} />
           </div>
         </ScrollArea>
       ) : fileType === 'text' ? (
-        <ScrollArea className="flex-1">
-          <pre className="p-4 text-sm font-mono whitespace-pre-wrap break-all">
+        <ScrollArea className="flex-1 min-h-0">
+          <pre className="p-6 text-sm font-mono whitespace-pre-wrap break-words">
             {content}
           </pre>
         </ScrollArea>

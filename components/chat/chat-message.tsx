@@ -4,6 +4,7 @@ import { Bot, User } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { ToolInvocation } from './tool-invocation';
+import { ChatMarkdown } from './chat-markdown';
 import type { UIMessage, UIMessagePart, UIDataTypes, UITools } from 'ai';
 import { isToolUIPart, isTextUIPart, getToolName } from 'ai';
 
@@ -74,7 +75,11 @@ export function ChatMessage({ message }: ChatMessageProps) {
               isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'
             )}
           >
-            <div className="text-sm whitespace-pre-wrap">{textContent}</div>
+            {isUser ? (
+              <div className="text-sm whitespace-pre-wrap">{textContent}</div>
+            ) : (
+              <ChatMarkdown content={textContent} />
+            )}
           </div>
         )}
       </div>

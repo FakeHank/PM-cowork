@@ -43,7 +43,9 @@ function createModelInstance(
         apiKey: apiKey || '',
         name: 'custom',
       });
-      return customProvider(modelId);
+      // Use .chat() to force /chat/completions endpoint
+      // Default provider() uses /responses which most OpenAI-compatible services don't support
+      return customProvider.chat(modelId);
     }
     
     default:

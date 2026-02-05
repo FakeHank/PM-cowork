@@ -1,8 +1,9 @@
 import { ToolLoopAgent, createAgentUIStreamResponse, stepCountIs } from 'ai';
 import { getModel } from '@/lib/ai/config';
+import { generateSessionTitle } from '@/lib/ai/title';
 import { buildWorkspaceSystemPrompt } from '@/lib/ai/prompts';
 import { createWorkspaceTools } from '@/lib/ai/tools';
-import { loadAgentContext, createSession, createMessage } from '@/lib/fs/queries';
+import { loadAgentContext, createSession, createMessage, getSession, updateSessionTitle } from '@/lib/fs/queries';
 
 export const maxDuration = 60;
 
@@ -29,9 +30,13 @@ export async function POST(req: Request) {
     const tools = createWorkspaceTools(versionId);
 
     let currentSessionId = sessionId;
+    let currentSessionTitle: string | undefined;
+    let createdSession = false;
     if (!currentSessionId) {
       const session = await createSession(versionId);
       currentSessionId = session.id;
+      currentSessionTitle = session.title || undefined;
+      createdSession = true;
     }
 
     const lastUserMessage = messages[messages.length - 1];
@@ -49,6 +54,25 @@ export async function POST(req: Request) {
       }
     }
 
+    if (!currentSessionTitle) {
+      const sessionMeta = createdSession
+        ? null
+        : await getSession(versionId, currentSessionId);
+      currentSessionTitle = sessionMeta?.title || undefined;
+    }
+
+    const userContent = lastUserMessage?.role === 'user'
+      ? (typeof lastUserMessage.content === 'string'
+          ? lastUserMessage.content
+          : lastUserMessage.parts?.find((p: { type: string }) => p.type === 'text')?.text || '')
+      : '';
+
+    if (!currentSessionTitle && userContent) {
+      const title = await generateSessionTitle(userContent);
+      currentSessionTitle = title;
+      await updateSessionTitle(versionId, currentSessionId, title);
+    }
+
     const model = await getModel();
     const agent = new ToolLoopAgent({
       model,
@@ -57,11 +81,18 @@ export async function POST(req: Request) {
       stopWhen: stepCountIs(10),
     });
 
+    const responseHeaders: Record<string, string> = {
+      'X-Session-Id': currentSessionId,
+    };
+    if (currentSessionTitle) {
+      responseHeaders['X-Session-Title'] = encodeURIComponent(currentSessionTitle);
+    }
+
     return createAgentUIStreamResponse({
       agent,
       uiMessages: messages,
       headers: {
-        'X-Session-Id': currentSessionId,
+        ...responseHeaders,
       },
       onStepFinish: async ({ text }) => {
         if (text) {

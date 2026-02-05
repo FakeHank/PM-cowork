@@ -54,7 +54,9 @@ function getFileIcon(entry: FileEntry) {
 export function FileBrowser({ versionId, onFileSelect, selectedFile }: FileBrowserProps) {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set(['assets', 'references']));
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(
+    new Set(['assets', 'references', 'sessions'])
+  );
 
   useEffect(() => {
     async function fetchFiles() {

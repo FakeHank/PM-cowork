@@ -493,7 +493,20 @@ export async function getSessionsByVersion(versionId: string): Promise<Session[]
     }
   }
 
-  return sessions.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  return sessions.sort((a, b) => {
+    const aNum = Number(a.id);
+    const bNum = Number(b.id);
+    const aIsNumeric = Number.isFinite(aNum) && String(aNum) === a.id;
+    const bIsNumeric = Number.isFinite(bNum) && String(bNum) === b.id;
+
+    if (aIsNumeric && bIsNumeric) {
+      return bNum - aNum;
+    }
+    if (aIsNumeric !== bIsNumeric) {
+      return aIsNumeric ? -1 : 1;
+    }
+    return b.updatedAt.getTime() - a.updatedAt.getTime();
+  });
 }
 
 export async function getSession(versionId: string, sessionId: string): Promise<Session | null> {
@@ -520,26 +533,32 @@ export async function createSession(versionId: string, title?: string): Promise<
     throw new Error('Invalid versionId');
   }
 
-  const now = new Date().toISOString();
-  const id = generateId();
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const sessionsDir = path.join(versionPath(projectId, versionFolder), 'sessions');
+  let id = now.getTime().toString();
+  let sessionPath = path.join(sessionsDir, `${id}.json`);
+  while (await exists(sessionPath)) {
+    id = (Number(id) + 1).toString();
+    sessionPath = path.join(sessionsDir, `${id}.json`);
+  }
 
   const data: SessionData = {
     id,
     title,
-    createdAt: now,
-    updatedAt: now,
+    createdAt: nowIso,
+    updatedAt: nowIso,
     messages: [],
   };
 
-  const sessionPath = path.join(versionPath(projectId, versionFolder), 'sessions', `${id}.json`);
   await writeJson(sessionPath, data);
 
   return {
     id,
     versionId,
     title,
-    createdAt: new Date(now),
-    updatedAt: new Date(now),
+    createdAt: new Date(nowIso),
+    updatedAt: new Date(nowIso),
   };
 }
 
@@ -598,6 +617,25 @@ export async function createMessage(
     metadata: {},
     createdAt: new Date(now),
   };
+}
+
+export async function updateSessionTitle(
+  versionId: string,
+  sessionId: string,
+  title: string
+): Promise<boolean> {
+  const [projectId, versionFolder] = versionId.split('/');
+  if (!projectId || !versionFolder) return false;
+
+  const sessionPath = path.join(versionPath(projectId, versionFolder), 'sessions', `${sessionId}.json`);
+  const data = await readJson<SessionData>(sessionPath);
+  if (!data) return false;
+
+  const now = new Date().toISOString();
+  data.title = title;
+  data.updatedAt = now;
+  await writeJson(sessionPath, data);
+  return true;
 }
 
 export async function loadAgentContext(versionId: string): Promise<AgentContext | null> {

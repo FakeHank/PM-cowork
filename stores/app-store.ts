@@ -1,11 +1,21 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Project, Version, InboxItem, Session, ProviderSettings, AppSettings } from '@/lib/types';
+import {
+  DEFAULT_MARKDOWN_SETTINGS,
+  type Project,
+  type Version,
+  type InboxItem,
+  type Session,
+  type ProviderSettings,
+  type AppSettings,
+  type MarkdownSettings,
+} from '@/lib/types';
 
 interface AppState {
   currentProject: Project | null;
   currentVersion: Version | null;
   currentSession: Session | null;
+  activeSession: { versionId: string; sessionId: string } | null;
   
   sidebarCollapsed: boolean;
   sidebarWidth: number;
@@ -15,6 +25,7 @@ interface AppState {
   setCurrentProject: (project: Project | null) => void;
   setCurrentVersion: (version: Version | null) => void;
   setCurrentSession: (session: Session | null) => void;
+  setActiveSession: (session: { versionId: string; sessionId: string } | null) => void;
   toggleSidebar: () => void;
   setSidebarWidth: (width: number) => void;
   toggleRightPanel: () => void;
@@ -30,6 +41,7 @@ export const useAppStore = create<AppState>((set) => ({
   currentProject: null,
   currentVersion: null,
   currentSession: null,
+  activeSession: null,
   
   sidebarCollapsed: false,
   sidebarWidth: 256,
@@ -39,6 +51,7 @@ export const useAppStore = create<AppState>((set) => ({
   setCurrentProject: (project) => set({ currentProject: project }),
   setCurrentVersion: (version) => set({ currentVersion: version }),
   setCurrentSession: (session) => set({ currentSession: session }),
+  setActiveSession: (session) => set({ activeSession: session }),
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   setSidebarWidth: (width) => set({ sidebarWidth: Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, width)) }),
   toggleRightPanel: () => set((state) => ({ rightPanelOpen: !state.rightPanelOpen })),
@@ -139,16 +152,70 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   )
 );
 
+interface RecentChat {
+  key: string;
+  title: string;
+  kind: 'workspace' | 'canvas';
+  href: string;
+  sessionId?: string;
+  versionId?: string;
+  canvasId?: string;
+  context?: string;
+  updatedAt: string;
+}
+
+interface RecentsState {
+  chats: RecentChat[];
+  upsertChat: (chat: RecentChat) => void;
+  removeChat: (key: string) => void;
+  clearChats: () => void;
+}
+
+const MAX_RECENT_CHATS = 12;
+
+export const useRecentsStore = create<RecentsState>()(
+  persist(
+    (set) => ({
+      chats: [],
+      upsertChat: (chat) =>
+        set((state) => {
+          const filtered = state.chats.filter((item) => item.key !== chat.key);
+          const next = [chat, ...filtered];
+          return { chats: next.slice(0, MAX_RECENT_CHATS) };
+        }),
+      removeChat: (key) =>
+        set((state) => ({
+          chats: state.chats.filter((item) => item.key !== key),
+        })),
+      clearChats: () => set({ chats: [] }),
+    }),
+    { name: 'pmwork-recents' }
+  )
+);
+
 const DEFAULT_PROVIDER_SETTINGS: ProviderSettings = {
   provider: 'anthropic',
   defaultModel: 'claude-sonnet-4-20250514',
 };
+const DEFAULT_SETTINGS: AppSettings = {
+  provider: DEFAULT_PROVIDER_SETTINGS,
+  theme: 'system',
+  markdown: DEFAULT_MARKDOWN_SETTINGS,
+};
+
+const normalizeSettings = (settings?: AppSettings): AppSettings => ({
+  ...DEFAULT_SETTINGS,
+  ...settings,
+  provider: { ...DEFAULT_PROVIDER_SETTINGS, ...settings?.provider },
+  markdown: { ...DEFAULT_MARKDOWN_SETTINGS, ...settings?.markdown },
+});
 
 interface SettingsState {
   settings: AppSettings;
   isLoading: boolean;
   
   setProviderSettings: (provider: ProviderSettings) => void;
+  setMarkdownSettings: (markdown: MarkdownSettings) => void;
   setSettings: (settings: AppSettings) => void;
   setLoading: (loading: boolean) => void;
   resetSettings: () => void;
@@ -157,22 +224,19 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      settings: {
-        provider: DEFAULT_PROVIDER_SETTINGS,
-        theme: 'system',
-      },
+      settings: normalizeSettings(),
       isLoading: false,
       
       setProviderSettings: (provider) => set((state) => ({
         settings: { ...state.settings, provider }
       })),
-      setSettings: (settings) => set({ settings }),
+      setMarkdownSettings: (markdown) => set((state) => ({
+        settings: { ...state.settings, markdown }
+      })),
+      setSettings: (settings) => set({ settings: normalizeSettings(settings) }),
       setLoading: (isLoading) => set({ isLoading }),
       resetSettings: () => set({
-        settings: {
-          provider: DEFAULT_PROVIDER_SETTINGS,
-          theme: 'system',
-        }
+        settings: normalizeSettings(),
       }),
     }),
     {

@@ -13,9 +13,13 @@ import {
   FileText,
   ArrowUp,
   Home,
-  Clock
+  Clock,
+  FolderPlus,
+  X,
+  Check
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
@@ -46,12 +50,21 @@ export function FolderSelector({ projectName, versionName, currentPath }: Folder
   const router = useRouter();
   const { setCurrentFolderPath, recentFolders, addRecentFolder } = useWorkspaceStore();
   const [dialogState, setDialogState] = useState<DialogState>({ type: 'closed' });
+  const [activeTab, setActiveTab] = useState<'browse' | 'recent'>('browse');
+  const [showNewFolderInput, setShowNewFolderInput] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [createFolderError, setCreateFolderError] = useState<string | null>(null);
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
 
   const displayName = projectName && versionName 
     ? `${projectName} / ${versionName}`
     : 'Select Folder';
 
   const loadDirectory = async (dirPath?: string) => {
+    setActiveTab('browse');
+    setShowNewFolderInput(false);
+    setNewFolderName('');
+    setCreateFolderError(null);
     setDialogState(prev => ({
       type: 'browsing',
       currentPath: prev.type === 'browsing' ? prev.currentPath : '',
@@ -84,11 +97,27 @@ export function FolderSelector({ projectName, versionName, currentPath }: Folder
   };
 
   const handleOpenDialog = () => {
+    setActiveTab('browse');
+    setShowNewFolderInput(false);
+    setNewFolderName('');
+    setCreateFolderError(null);
     loadDirectory(currentPath || undefined);
   };
 
   const handleCloseDialog = () => {
     setDialogState({ type: 'closed' });
+    setShowNewFolderInput(false);
+    setNewFolderName('');
+    setCreateFolderError(null);
+  };
+
+  const handleTabChange = (tab: 'browse' | 'recent') => {
+    setActiveTab(tab);
+    if (tab === 'recent') {
+      setShowNewFolderInput(false);
+      setNewFolderName('');
+      setCreateFolderError(null);
+    }
   };
 
   const handleNavigateToDirectory = (item: DirectoryItem) => {
@@ -109,6 +138,52 @@ export function FolderSelector({ projectName, versionName, currentPath }: Folder
 
   const handleNavigateHome = () => {
     loadDirectory(undefined);
+  };
+
+  const handleStartCreateFolder = () => {
+    setShowNewFolderInput(true);
+    setNewFolderName('');
+    setCreateFolderError(null);
+  };
+
+  const handleCancelCreateFolder = () => {
+    setShowNewFolderInput(false);
+    setNewFolderName('');
+    setCreateFolderError(null);
+    setIsCreatingFolder(false);
+  };
+
+  const handleCreateFolder = async () => {
+    if (dialogState.type !== 'browsing') return;
+    const name = newFolderName.trim();
+    if (!name) {
+      setCreateFolderError('请输入文件夹名称');
+      return;
+    }
+
+    setIsCreatingFolder(true);
+    setCreateFolderError(null);
+
+    try {
+      const response = await fetch('/api/folder/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parentPath: dialogState.currentPath, name }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setCreateFolderError(data.error || '创建失败');
+        return;
+      }
+
+      handleCancelCreateFolder();
+      loadDirectory(dialogState.currentPath);
+    } catch {
+      setCreateFolderError('网络错误，无法创建文件夹');
+    } finally {
+      setIsCreatingFolder(false);
+    }
   };
 
   const handleSelectCurrentFolder = async () => {
@@ -304,120 +379,222 @@ export function FolderSelector({ projectName, versionName, currentPath }: Folder
       </button>
 
       <Dialog open={dialogState.type !== 'closed'} onOpenChange={(open) => !open && handleCloseDialog()}>
-        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col p-0 gap-0">
           {dialogState.type === 'browsing' && (
-            <>
-              <DialogHeader>
-                <DialogTitle>选择文件夹</DialogTitle>
-                <DialogDescription className="truncate font-mono text-xs">
-                  {dialogState.currentPath}
-                </DialogDescription>
-              </DialogHeader>
-              
-              <div className="flex items-center gap-1 border-b pb-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleNavigateHome}
-                  disabled={dialogState.loading}
-                >
-                  <Home className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleNavigateUp}
-                  disabled={dialogState.loading || !dialogState.parentPath}
-                >
-                  <ArrowUp className="h-4 w-4" />
-                </Button>
-                <div className="flex-1 text-sm text-muted-foreground truncate px-2">
-                  {dialogState.currentPath.split('/').slice(-2).join('/')}
+            <div className="flex flex-col min-h-0">
+              <div className="px-6 pt-5 pb-4 border-b bg-muted/20">
+                <DialogHeader className="gap-1">
+                  <DialogTitle>选择文件夹</DialogTitle>
+                  <DialogDescription className="truncate font-mono text-xs">
+                    {dialogState.currentPath}
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="mt-4 flex items-center gap-3">
+                  <div className="flex items-center gap-1 rounded-full bg-muted/60 p-1 shadow-inner">
+                    <button
+                      type="button"
+                      onClick={() => handleTabChange('browse')}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-full transition flex items-center gap-1 ${
+                        activeTab === 'browse'
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <Folder className="h-3.5 w-3.5" />
+                      浏览
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTabChange('recent')}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-full transition flex items-center gap-1 ${
+                        activeTab === 'recent'
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <Clock className="h-3.5 w-3.5" />
+                      最近打开
+                    </button>
+                  </div>
+                  <div className="ml-auto text-xs text-muted-foreground">
+                    {recentFolders.length > 0 ? `最近 ${recentFolders.length} 条` : '暂无最近记录'}
+                  </div>
                 </div>
               </div>
 
-              <div className="flex flex-1 gap-4 min-h-0">
-                <ScrollArea className="flex-1 border rounded-md">
-                  {dialogState.loading ? (
-                    <div className="flex items-center justify-center h-[280px]">
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              {activeTab === 'browse' && (
+                <>
+                  <div className="px-6 py-3 border-b flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleNavigateHome}
+                      disabled={dialogState.loading}
+                    >
+                      <Home className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleNavigateUp}
+                      disabled={dialogState.loading || !dialogState.parentPath}
+                    >
+                      <ArrowUp className="h-4 w-4" />
+                    </Button>
+                    <div className="flex-1 text-sm text-muted-foreground truncate px-2">
+                      {dialogState.currentPath.split('/').slice(-2).join('/')}
                     </div>
-                  ) : dialogState.items.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-[280px] text-muted-foreground">
-                      <Folder className="h-8 w-8 mb-2" />
-                      <p className="text-sm">空文件夹</p>
-                    </div>
-                  ) : (
-                    <div className="p-2 space-y-0.5">
-                      {dialogState.items.map((item) => (
-                        <button
-                          type="button"
-                          key={item.path}
-                          onClick={() => handleNavigateToDirectory(item)}
-                          className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent text-left text-sm group"
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleStartCreateFolder}
+                      disabled={dialogState.loading}
+                      className="rounded-full border border-dashed border-muted-foreground/30 bg-background/80 text-muted-foreground hover:text-foreground hover:border-foreground/40"
+                    >
+                      <FolderPlus className="h-4 w-4 mr-2" />
+                      新建文件夹
+                    </Button>
+                  </div>
+
+                  {showNewFolderInput && (
+                    <div className="px-6 py-3 border-b bg-muted/10">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={newFolderName}
+                          onChange={(e) => setNewFolderName(e.target.value)}
+                          placeholder="输入新文件夹名称"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleCreateFolder();
+                            }
+                            if (e.key === 'Escape') {
+                              e.preventDefault();
+                              handleCancelCreateFolder();
+                            }
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={handleCreateFolder}
+                          disabled={isCreatingFolder}
                         >
-                          {getItemIcon(item)}
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate">{item.name}</div>
-                            {item.type === 'project' && item.projectName && (
-                              <div className="text-xs text-amber-600 truncate">Project: {item.projectName}</div>
-                            )}
-                            {item.type === 'version' && item.versionName && (
-                              <div className="text-xs text-blue-600 truncate">Version: {item.versionName}</div>
-                            )}
-                          </div>
-                          <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100" />
-                        </button>
-                      ))}
+                          <Check className="h-4 w-4 mr-1" />
+                          创建
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleCancelCreateFolder}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {createFolderError && (
+                        <div className="text-xs text-destructive mt-2">
+                          {createFolderError}
+                        </div>
+                      )}
                     </div>
                   )}
-                </ScrollArea>
+                </>
+              )}
 
-                {recentFolders.length > 0 && (
-                  <div className="w-52 shrink-0">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                      <Clock className="h-4 w-4" />
-                      <span>最近打开</span>
-                    </div>
-                    <ScrollArea className="h-[280px] border rounded-md">
+              <div className="flex-1 min-h-0 px-6 py-4">
+                {activeTab === 'browse' ? (
+                  <ScrollArea className="h-full border rounded-lg bg-background">
+                    {dialogState.loading ? (
+                      <div className="flex items-center justify-center h-[280px]">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : dialogState.items.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-[280px] text-muted-foreground">
+                        <Folder className="h-8 w-8 mb-2" />
+                        <p className="text-sm">空文件夹</p>
+                      </div>
+                    ) : (
                       <div className="p-2 space-y-0.5">
-                        {recentFolders.slice(0, 8).map((folder) => (
+                        {dialogState.items.map((item) => (
+                          <button
+                            type="button"
+                            key={item.path}
+                            onClick={() => handleNavigateToDirectory(item)}
+                            className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent text-left text-sm group"
+                          >
+                            {getItemIcon(item)}
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium truncate">{item.name}</div>
+                              {item.type === 'project' && item.projectName && (
+                                <div className="text-xs text-amber-600 truncate">Project: {item.projectName}</div>
+                              )}
+                              {item.type === 'version' && item.versionName && (
+                                <div className="text-xs text-blue-600 truncate">Version: {item.versionName}</div>
+                              )}
+                            </div>
+                            <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                ) : (
+                  <ScrollArea className="h-full border rounded-lg bg-background">
+                    {recentFolders.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-[280px] text-muted-foreground">
+                        <Clock className="h-8 w-8 mb-2" />
+                        <p className="text-sm">还没有最近打开的记录</p>
+                      </div>
+                    ) : (
+                      <div className="p-2 space-y-0.5">
+                        {recentFolders.slice(0, 20).map((folder) => (
                           <button
                             type="button"
                             key={folder.path}
                             onClick={() => handleSelectRecent(folder)}
-                            className="w-full flex items-center gap-2 px-2 py-2 rounded-md hover:bg-accent text-left text-xs"
+                            className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent text-left text-sm"
                           >
-                            <FolderOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
                             <div className="min-w-0 flex-1">
                               <div className="font-medium truncate">
                                 {folder.projectName}
                               </div>
-                              <div className="text-muted-foreground truncate">
+                              <div className="text-xs text-muted-foreground truncate">
                                 {folder.versionName}
                               </div>
                             </div>
                           </button>
                         ))}
                       </div>
-                    </ScrollArea>
-                  </div>
+                    )}
+                  </ScrollArea>
                 )}
               </div>
 
-              <DialogFooter>
-                <Button variant="outline" onClick={handleCloseDialog}>
-                  取消
-                </Button>
-                <Button onClick={handleSelectCurrentFolder} disabled={dialogState.loading}>
-                  选择当前文件夹
-                </Button>
-              </DialogFooter>
-            </>
+              <div className="px-6 py-4 border-t bg-muted/20">
+                {activeTab === 'browse' ? (
+                  <div className="flex items-center justify-end gap-2">
+                    <Button variant="outline" onClick={handleCloseDialog}>
+                      取消
+                    </Button>
+                    <Button onClick={handleSelectCurrentFolder} disabled={dialogState.loading}>
+                      选择当前文件夹
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-end">
+                    <Button variant="outline" onClick={handleCloseDialog}>
+                      关闭
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {dialogState.type === 'confirming-project' && (
-            <>
+            <div className="p-6">
               <DialogHeader>
                 <DialogTitle>检测到项目文件夹</DialogTitle>
                 <DialogDescription>
@@ -437,11 +614,11 @@ export function FolderSelector({ projectName, versionName, currentPath }: Folder
                   </Button>
                 )}
               </DialogFooter>
-            </>
+            </div>
           )}
 
           {dialogState.type === 'confirming-unknown' && (
-            <>
+            <div className="p-6">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-amber-600">
                   <AlertCircle className="h-5 w-5" />
@@ -462,11 +639,11 @@ export function FolderSelector({ projectName, versionName, currentPath }: Folder
                   创建新项目
                 </Button>
               </DialogFooter>
-            </>
+            </div>
           )}
 
           {dialogState.type === 'error' && (
-            <>
+            <div className="p-6">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-destructive">
                   <AlertCircle className="h-5 w-5" />
@@ -479,7 +656,7 @@ export function FolderSelector({ projectName, versionName, currentPath }: Folder
                   返回
                 </Button>
               </DialogFooter>
-            </>
+            </div>
           )}
         </DialogContent>
       </Dialog>

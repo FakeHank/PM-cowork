@@ -4,6 +4,7 @@ import path from 'path';
 export const PROJECTS_ROOT = path.join(process.cwd(), 'projects');
 export const GLOBAL_INBOX_ROOT = path.join(process.cwd(), 'inbox');
 export const SETTINGS_FILE = path.join(process.cwd(), 'settings.json');
+export const MARKDOWN_CSS_FILE = path.join(process.cwd(), 'app', 'markdown-preview.css');
 
 export async function ensureDir(dirPath: string): Promise<void> {
   try {

@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { ChatMessage } from '@/components/chat/chat-message';
 import { FolderSelector } from '@/components/workspace/folder-selector';
-import { useAppStore, useWorkspaceStore } from '@/stores/app-store';
+import { useAppStore, useWorkspaceStore, useRecentsStore } from '@/stores/app-store';
 import type { UIMessage } from 'ai';
 import type { Project, Version, Message as StoredMessage } from '@/lib/types';
 
@@ -32,10 +32,12 @@ export default function VersionPage({ params }: VersionPageProps) {
   const [input, setInput] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null);
+  const [sessionTitle, setSessionTitle] = useState<string | null>(null);
   const [isGeneratingCanvas, setIsGeneratingCanvas] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sessionIdRef = useRef<string | null>(null);
   const { setCurrentProject, setCurrentVersion, activeSession } = useAppStore();
+  const { upsertChat } = useRecentsStore();
   const { currentFolderPath } = useWorkspaceStore();
 
   const fullVersionId = `${projectId}/${versionId}`;
@@ -45,18 +47,51 @@ export default function VersionPage({ params }: VersionPageProps) {
     [fullVersionId]
   );
 
+  const buildWorkspaceRecent = useCallback(
+    (title: string, updatedAt = new Date().toISOString()) => {
+      const currentSessionId = sessionIdRef.current;
+      if (!currentSessionId) return;
+      const contextLabel = project && version
+        ? `${project.name} / ${version.name}`
+        : `${projectId} / ${versionId}`;
+      upsertChat({
+        key: `workspace:${fullVersionId}:${currentSessionId}`,
+        kind: 'workspace',
+        title,
+        href: `/workspace/${projectId}/${versionId}`,
+        sessionId: currentSessionId,
+        versionId: fullVersionId,
+        context: contextLabel,
+        updatedAt,
+      });
+    },
+    [fullVersionId, project, projectId, upsertChat, version, versionId]
+  );
+
   const chatFetch = useCallback(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const response = await fetch(input, init);
       const newSessionId = response.headers.get('X-Session-Id');
+      const newSessionTitle = response.headers.get('X-Session-Title');
       if (newSessionId && newSessionId !== sessionIdRef.current) {
         sessionIdRef.current = newSessionId;
         setSessionId(newSessionId);
         localStorage.setItem(sessionStorageKey, newSessionId);
       }
+      if (newSessionTitle) {
+        const decodedTitle = (() => {
+          try {
+            return decodeURIComponent(newSessionTitle);
+          } catch {
+            return newSessionTitle;
+          }
+        })();
+        setSessionTitle(decodedTitle);
+        buildWorkspaceRecent(decodedTitle);
+      }
       return response;
     },
-    [sessionStorageKey]
+    [buildWorkspaceRecent, sessionStorageKey]
   );
 
   const transport = useMemo(
@@ -82,6 +117,11 @@ export default function VersionPage({ params }: VersionPageProps) {
     clearError,
   } = useChat({
     transport,
+    onFinish: () => {
+      if (sessionTitle) {
+        buildWorkspaceRecent(sessionTitle, new Date().toISOString());
+      }
+    },
   });
 
   const isChatLoading = status === 'streaming' || status === 'submitted';
@@ -91,7 +131,14 @@ export default function VersionPage({ params }: VersionPageProps) {
     sessionIdRef.current = storedSessionId;
     setSessionId(storedSessionId);
     setLoadedSessionId(null);
+    setSessionTitle(null);
   }, [sessionStorageKey]);
+
+  useEffect(() => {
+    if (sessionTitle) {
+      buildWorkspaceRecent(sessionTitle);
+    }
+  }, [buildWorkspaceRecent, sessionTitle, project, version]);
 
   useEffect(() => {
     if (!activeSession) return;
@@ -102,6 +149,7 @@ export default function VersionPage({ params }: VersionPageProps) {
     setSessionId(activeSession.sessionId);
     setLoadedSessionId(null);
     setMessages([]);
+    setSessionTitle(null);
     localStorage.setItem(sessionStorageKey, activeSession.sessionId);
   }, [activeSession, fullVersionId, sessionStorageKey, setMessages]);
 
@@ -140,8 +188,13 @@ export default function VersionPage({ params }: VersionPageProps) {
 
         const { data } = await res.json();
         const history = toUIMessages(data?.messages || []);
+        const title = data?.session?.title as string | undefined;
         if (isActive && history.length > 0) {
           setMessages((current) => (current.length === 0 ? history : current));
+        }
+        if (isActive && title) {
+          setSessionTitle(title);
+          buildWorkspaceRecent(title);
         }
       } catch (err) {
         console.error('Failed to load session history:', err);
@@ -218,19 +271,16 @@ export default function VersionPage({ params }: VersionPageProps) {
   const handleGenerateCanvas = async () => {
     try {
       setIsGeneratingCanvas(true);
-      
-      // Check if canvas already exists
+
       const checkRes = await fetch(`/api/canvas?versionId=${encodeURIComponent(fullVersionId)}`);
       if (checkRes.ok) {
         const { data } = await checkRes.json();
         if (data && data.id) {
-          // Canvas exists, navigate to it
           router.push(`/canvas/${data.id}`);
           return;
         }
       }
-      
-      // Canvas doesn't exist, create one
+
       const createRes = await fetch('/api/canvas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -239,17 +289,17 @@ export default function VersionPage({ params }: VersionPageProps) {
           name: `Canvas - ${version?.name || 'Untitled'}`,
         }),
       });
-      
+
       if (!createRes.ok) {
-        const error = await createRes.json();
-        throw new Error(error.error || 'Failed to create canvas');
+        const err = await createRes.json();
+        throw new Error(err.error || 'Failed to create canvas');
       }
-      
+
       const { data } = await createRes.json();
-      router.push(`/canvas/${data.id}`);
-    } catch (error) {
-      console.error('Failed to generate canvas:', error);
-      alert(error instanceof Error ? error.message : 'Failed to generate canvas');
+      router.push(`/canvas/${data.id}?generate=true`);
+    } catch (err) {
+      console.error('Failed to generate canvas:', err);
+      alert(err instanceof Error ? err.message : 'Failed to generate canvas');
     } finally {
       setIsGeneratingCanvas(false);
     }
@@ -272,8 +322,8 @@ export default function VersionPage({ params }: VersionPageProps) {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <header className="flex items-center justify-between px-6 py-3 border-b">
+    <div className="flex flex-col h-full min-h-0">
+      <header className="sticky top-0 z-10 flex items-center justify-between px-6 py-3 border-b bg-background shrink-0">
         <div className="flex items-center gap-3">
           <FolderSelector
             projectName={project?.name}
@@ -299,8 +349,8 @@ export default function VersionPage({ params }: VersionPageProps) {
         </Button>
       </header>
 
-      <ScrollArea className="flex-1 p-6" ref={scrollRef}>
-        <div className="max-w-3xl mx-auto space-y-6">
+      <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
+        <div className="max-w-3xl mx-auto space-y-6 p-6">
           {messages.length === 0 && (
             <div className="text-center py-12">
               <Bot className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -339,7 +389,7 @@ export default function VersionPage({ params }: VersionPageProps) {
         </div>
       </ScrollArea>
 
-      <div className="border-t p-4">
+      <div className="sticky bottom-0 z-10 border-t p-4 bg-background shrink-0">
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto flex gap-2">
           <Textarea
             placeholder="输入你的需求，例如「帮我写用户故事」..."

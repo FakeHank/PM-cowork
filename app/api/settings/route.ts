@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readJson, writeJson, SETTINGS_FILE } from '@/lib/fs';
-import type { AppSettings } from '@/lib/types';
+import { DEFAULT_MARKDOWN_SETTINGS, type AppSettings } from '@/lib/types';
 
 const DEFAULT_SETTINGS: AppSettings = {
   provider: {
@@ -8,32 +8,41 @@ const DEFAULT_SETTINGS: AppSettings = {
     defaultModel: 'claude-sonnet-4-20250514',
   },
   theme: 'system',
+  markdown: DEFAULT_MARKDOWN_SETTINGS,
 };
+
+const normalizeSettings = (settings?: AppSettings): AppSettings => ({
+  ...DEFAULT_SETTINGS,
+  ...settings,
+  provider: { ...DEFAULT_SETTINGS.provider, ...settings?.provider },
+  markdown: { ...DEFAULT_MARKDOWN_SETTINGS, ...settings?.markdown },
+});
 
 export async function GET() {
   const settings = await readJson<AppSettings>(SETTINGS_FILE);
-  return NextResponse.json({ data: settings || DEFAULT_SETTINGS });
+  return NextResponse.json({ data: normalizeSettings(settings || undefined) });
 }
 
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const settings = body as AppSettings;
+    const incoming = body as AppSettings;
     
-    if (!settings.provider?.provider || !settings.provider?.defaultModel) {
+    if (!incoming.provider?.provider || !incoming.provider?.defaultModel) {
       return NextResponse.json(
         { error: 'Invalid settings: provider and defaultModel required' },
         { status: 400 }
       );
     }
     
-    if (settings.provider.provider === 'custom' && !settings.provider.baseUrl) {
+    if (incoming.provider.provider === 'custom' && !incoming.provider.baseUrl) {
       return NextResponse.json(
         { error: 'Custom provider requires baseUrl' },
         { status: 400 }
       );
     }
     
+    const settings = normalizeSettings(incoming);
     await writeJson(SETTINGS_FILE, settings);
     return NextResponse.json({ data: settings });
   } catch {

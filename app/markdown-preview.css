@@ -1,0 +1,204 @@
+/* Editable via Settings → Markdown CSS */
+.markdown-preview {
+  --md-font-size: 1rem;
+  --md-line-height: 1.7;
+  --md-space: 0.9rem;
+  --md-heading-space: 1.2rem;
+  font-size: var(--md-font-size);
+  line-height: var(--md-line-height);
+  color: var(--foreground);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
+}
+
+.markdown-preview--size-sm {
+  --md-font-size: 0.9375rem;
+}
+
+.markdown-preview--size-md {
+  --md-font-size: 1rem;
+}
+
+.markdown-preview--size-lg {
+  --md-font-size: 1.125rem;
+}
+
+.markdown-preview--style-compact {
+  --md-space: 0.6rem;
+  --md-heading-space: 0.9rem;
+  --md-line-height: 1.55;
+}
+
+.markdown-preview--style-elegant {
+  --md-space: 0.9rem;
+  --md-heading-space: 1.2rem;
+  --md-line-height: 1.7;
+}
+
+.markdown-preview--style-spacious {
+  --md-space: 1.2rem;
+  --md-heading-space: 1.5rem;
+  --md-line-height: 1.85;
+}
+
+.markdown-preview > * + * {
+  margin-top: var(--md-space);
+}
+
+.markdown-preview :where(p, ul, ol, pre, blockquote, table, hr) {
+  margin: 0;
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4 {
+  font-weight: 600;
+  line-height: 1.2;
+  margin-top: var(--md-heading-space);
+  margin-bottom: calc(var(--md-space) * 0.5);
+  letter-spacing: -0.01em;
+}
+
+.markdown-preview h1 {
+  font-size: 1.6em;
+}
+
+.markdown-preview h2 {
+  font-size: 1.35em;
+}
+
+.markdown-preview h3 {
+  font-size: 1.15em;
+}
+
+.markdown-preview h4 {
+  font-size: 1.05em;
+}
+
+.markdown-preview p {
+  color: var(--foreground);
+}
+
+.markdown-preview a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
+
+.markdown-preview a:hover {
+  color: color-mix(in oklab, var(--primary) 85%, white);
+}
+
+.markdown-preview strong {
+  font-weight: 600;
+}
+
+.markdown-preview em {
+  color: color-mix(in oklab, var(--foreground) 80%, transparent);
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  padding-left: 1.5rem;
+}
+
+.markdown-preview li {
+  margin: 0.2rem 0;
+}
+
+.markdown-preview li::marker {
+  color: var(--muted-foreground);
+  font-weight: 600;
+}
+
+.markdown-preview ul ul,
+.markdown-preview ul ol,
+.markdown-preview ol ul,
+.markdown-preview ol ol {
+  margin-top: 0.25rem;
+}
+
+.markdown-preview blockquote {
+  border-left: 3px solid color-mix(in oklab, var(--primary) 30%, transparent);
+  background: color-mix(in oklab, var(--muted) 70%, transparent);
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  color: var(--muted-foreground);
+}
+
+.markdown-preview blockquote > * + * {
+  margin-top: 0.5rem;
+}
+
+.markdown-preview hr {
+  border: none;
+  border-top: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
+}
+
+.markdown-preview .markdown-pre {
+  background: color-mix(in oklab, var(--muted) 80%, transparent);
+  border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  border-radius: var(--radius-lg);
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.markdown-preview .markdown-code,
+.markdown-preview .markdown-inline-code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.markdown-preview .markdown-inline-code {
+  background: color-mix(in oklab, var(--muted) 70%, transparent);
+  border-radius: 0.35em;
+  padding: 0.1em 0.35em;
+}
+
+.markdown-preview .markdown-pre .markdown-code {
+  background: none;
+  padding: 0;
+  display: block;
+}
+
+.markdown-preview .markdown-table {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.markdown-preview .markdown-table table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 420px;
+}
+
+.markdown-preview .markdown-table th,
+.markdown-preview .markdown-table td {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.65rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-preview .markdown-table th {
+  background: color-mix(in oklab, var(--muted) 70%, transparent);
+  font-weight: 600;
+  font-size: 0.95em;
+}
+
+.markdown-preview .markdown-image {
+  max-width: 100%;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+
+.markdown-preview .markdown-checkbox {
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  accent-color: var(--primary);
+}
